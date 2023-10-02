@@ -40,11 +40,12 @@ class SearchConfig(BaseConfig):
     def build_parser(self):
         parser = get_parser("Search config")
         parser.add_argument('--data_name', type=str, default="f1_ours", help='data name')
+        parser.add_argument('--data_path', type=str, default="dataset/processed/f1", help='data name')
         parser.add_argument('--batch_size', type=int, default=16, help='batch size')
         parser.add_argument('--population', type=int, default=100, help='population')
         parser.add_argument('--gpus', default='0', help='gpu device ids separated by comma. '
                             '`all` indicates use all gpus.')
-        parser.add_argument('--epochs', type=int, default=50, help='# of training epochs')
+        parser.add_argument('--epochs', type=int, default=5, help='# of training epochs')
         parser.add_argument('--generations', type=int, default=50, help='generations')
         parser.add_argument('--mutProb', type=float, default=0.49)
         parser.add_argument('--cxProb', type=float, default=0.5)
@@ -53,6 +54,11 @@ class SearchConfig(BaseConfig):
         parser.add_argument('--initialMaxDepth', type=int, default=6)
         parser.add_argument('--maxDepth', type=int, default=10)
         parser.add_argument('--seed', type=int, default=0, help='random seed')
+        parser.add_argument('--classes_number', type=int, default=2, help='the number of classes')
+        parser.add_argument('--rounds_experiment', type=int, default=10, help='the rounds of experiments')
+
+        parser.add_argument('--network_operations', choices=['standard', 'darts'], type=str, default="standard",
+                            help='Choose between "standard" or "darts" mode (e.g., --mode standard)')
 
         return parser
 

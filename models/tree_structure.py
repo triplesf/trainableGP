@@ -24,14 +24,14 @@ from torchsummary import summary
 
 
 # Fitness evaluation
-def evalTrain(individual, device, train_loader, val_loader):  # , x_train, y_train
+def evalTrain(individual, device, train_loader, val_loader, config, operations_type="standard", n_classes=2):  # , x_train, y_train
     val_num = len(val_loader.dataset)
-    model = SearchCell(individual, n_classes=2)
+    model = SearchCell(individual, operations_type, n_classes=n_classes)
     model = model.to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=0.0002)
     loss_function = nn.CrossEntropyLoss()
 
-    for epoch in range(20):
+    for epoch in range(config.epochs):
         # train
         model.train()
         running_loss = 0.0
@@ -60,14 +60,15 @@ def evalTrain(individual, device, train_loader, val_loader):  # , x_train, y_tra
     return val_accurate,
 
 
-def evalTest(individual, device, test_loader, all_train_loader, run_summary=False):
+def evalTest(individual, device, test_loader, all_train_loader, config, run_summary=False, operations_type="standard",
+             n_classes=2):
     test_num = len(test_loader.dataset)
-    model = SearchCell(individual, n_classes=2)
+    model = SearchCell(individual, operations_type, n_classes=n_classes)
     model = model.to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=0.0002)
     loss_function = nn.CrossEntropyLoss()
 
-    for epoch in range(20):
+    for epoch in range(config.epochs):
         # train
         model.train()
         running_loss = 0.0
@@ -264,7 +265,8 @@ def gp_process(config, toolbox, logger, run_visual=True):
     return test_result
 
 
-def init_structure(config, device, train_loader, val_loader, test_loader, all_train_loader):
+def initialize_standard_operations(config, device, train_loader, val_loader, test_loader, all_train_loader,
+                                   num_classes):
     pset = gp_tree.PrimitiveSetTyped('MAIN', [Img], Vector, prefix='Image')
 
     pset.addPrimitive(fs.root_conVector2, [Img, Img], Vector, name='Root2')
@@ -291,7 +293,55 @@ def init_structure(config, device, train_loader, val_loader, test_loader, all_tr
     toolbox.register("population", tools.initRepeat, list, toolbox.individual)
     toolbox.register("compile", gp.compile, pset=pset)
     toolbox.register("mapp", futures.map)
-    toolbox.register("evaluate", evalTrain, device=device, train_loader=train_loader, val_loader=val_loader)
+    toolbox.register("evaluate", evalTrain, config=config, device=device, train_loader=train_loader, val_loader=val_loader,
+                     operations_type=config.network_operations, n_classes=num_classes)
+    toolbox.register("select", tools.selTournament, tournsize=7)
+    toolbox.register("selectElitism", tools.selBest)
+    toolbox.register("mate", gp.cxOnePoint)
+    toolbox.register("expr_mut", gp_restrict.genFull, min_=0, max_=6)
+    toolbox.register("mutate", gp.mutUniform, expr=toolbox.expr_mut, pset=pset)
+    toolbox.register("mutate_eph", gp.mutEphemeral, mode='all')
+    toolbox.decorate("mate", gp.staticLimit(key=operator.attrgetter("height"), max_value=config.maxDepth))
+    toolbox.decorate("mutate", gp.staticLimit(key=operator.attrgetter("height"), max_value=config.maxDepth))
+    toolbox.register("evaluate_test", evalTest, config=config, device=device, test_loader=test_loader,
+                     all_train_loader=all_train_loader, operations_type=config.network_operations,
+                     n_classes=num_classes)
+    return toolbox
+
+
+def initialize_darts_operations(config, device, train_loader, val_loader, test_loader, all_train_loader, num_classes):
+    pset = gp_tree.PrimitiveSetTyped('MAIN', [Img], Vector, prefix='Image')
+
+    pset.addPrimitive(fs.root_conVector2, [Img, Img], Vector, name='Root2')
+    pset.addPrimitive(fs.root_conVector3, [Img, Img, Img], Vector, name='Root3')
+    pset.addPrimitive(fs.root_conVector4, [Img, Img, Img, Img], Vector, name='Root4')
+
+    # Pooling functions at the Pooling layer.
+    pset.addPrimitive(fs.maxP, [Img], Img, name='max_pool_3x3')  # max-pooling operator
+    pset.addPrimitive(fs.aveP, [Img], Img, name='avg_pool_3x3')  # average-pooling operator
+
+    # Filteing functions at the Filtering layer
+    pset.addPrimitive(fs.conv_filters, [Img], Img, name='sep_conv_3x3')  # convolution operator
+    pset.addPrimitive(fs.conv_filters, [Img], Img, name='sep_conv_5x5')  # convolution operator
+    pset.addPrimitive(fs.conv_filters, [Img], Img, name='sep_conv_7x7')  # convolution operator
+    pset.addPrimitive(fs.conv_filters, [Img], Img, name='dil_conv_3x3')  # convolution operator
+    pset.addPrimitive(fs.conv_filters, [Img], Img, name='dil_conv_5x5')  # convolution operator
+    pset.addPrimitive(fs.conv_filters, [Img], Img, name='conv_7x1_1x7')  # convolution operator
+    pset.addPrimitive(fs.mixconadd, [Img, Img], Img, name='Add')
+
+    # Terminals
+    pset.renameArguments(ARG0='grey')  # the input image
+    creator.create("FitnessMax", base.Fitness, weights=(1.0,))
+    creator.create("Individual", gp.PrimitiveTree, fitness=creator.FitnessMax)
+    toolbox = base.Toolbox()
+    toolbox.register("expr", gp_restrict.genHalfAndHalfMD, pset=pset,
+                     min_=config.initialMinDepth, max_=config.initialMaxDepth)
+    toolbox.register("individual", tools.initIterate, creator.Individual, toolbox.expr)
+    toolbox.register("population", tools.initRepeat, list, toolbox.individual)
+    toolbox.register("compile", gp.compile, pset=pset)
+    toolbox.register("mapp", futures.map)
+    toolbox.register("evaluate", evalTrain, device=device, train_loader=train_loader, val_loader=val_loader,
+                     operations_type=config.network_operations, n_classes=num_classes)
     toolbox.register("select", tools.selTournament, tournsize=7)
     toolbox.register("selectElitism", tools.selBest)
     toolbox.register("mate", gp.cxOnePoint)
@@ -301,7 +351,8 @@ def init_structure(config, device, train_loader, val_loader, test_loader, all_tr
     toolbox.decorate("mate", gp.staticLimit(key=operator.attrgetter("height"), max_value=config.maxDepth))
     toolbox.decorate("mutate", gp.staticLimit(key=operator.attrgetter("height"), max_value=config.maxDepth))
     toolbox.register("evaluate_test", evalTest, device=device, test_loader=test_loader,
-                     all_train_loader=all_train_loader)
+                     all_train_loader=all_train_loader, operations_type=config.network_operations,
+                     n_classes=num_classes)
     return toolbox
 
 
@@ -336,7 +387,8 @@ def init_structure_2_type(config, device, train_loader, val_loader, test_loader,
     toolbox.register("population", tools.initRepeat, list, toolbox.individual)
     toolbox.register("compile", gp.compile, pset=pset)
     toolbox.register("mapp", futures.map)
-    toolbox.register("evaluate", evalTrain, device=device, train_loader=train_loader, val_loader=val_loader)
+    toolbox.register("evaluate", evalTrain, device=device, train_loader=train_loader, val_loader=val_loader,
+                     n_classes=config.classes_number)
     toolbox.register("select", tools.selTournament, tournsize=7)
     toolbox.register("selectElitism", tools.selBest)
     toolbox.register("mate", gp.cxOnePoint)
@@ -346,6 +398,6 @@ def init_structure_2_type(config, device, train_loader, val_loader, test_loader,
     toolbox.decorate("mate", gp.staticLimit(key=operator.attrgetter("height"), max_value=config.maxDepth))
     toolbox.decorate("mutate", gp.staticLimit(key=operator.attrgetter("height"), max_value=config.maxDepth))
     toolbox.register("evaluate_test", evalTest, device=device, test_loader=test_loader,
-                     all_train_loader=all_train_loader)
+                     all_train_loader=all_train_loader, n_classes=config.classes_number)
     return toolbox
 

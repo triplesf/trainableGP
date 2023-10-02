@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from models import ops
+from models.ops import OperationSelector
 import gp_tree
 
 
@@ -17,7 +17,7 @@ class SearchCell(nn.Module):
     """ Cell for search
     Each edge is mixed and continuous relaxed.
     """
-    def __init__(self, expr, n_classes=2):
+    def __init__(self, expr, operations_type, n_classes=2):
         super().__init__()
         nodes, edges, labels, sign, input_nodes = self.create_graph(expr)
         C_cur = 16     # 当前Sequential模块的输出通道数
@@ -47,7 +47,7 @@ class SearchCell(nn.Module):
                             c_node = edge[0]
                             c_label = labels[c_node]
                             if "Root" not in c_label and "Add" not in c_label:
-                                op = ops.MixedOp(c_label, C_cur)
+                                op = OperationSelector(c_label, C_cur, operations_type)
                                 sub_dag.append(op)
                             elif "Add" in c_label:
                                 # Add

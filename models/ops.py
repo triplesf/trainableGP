@@ -4,7 +4,7 @@ import torch.nn as nn
 import genotypes as gt
 
 
-OPS = {
+standard_operations = {
     'AvePF': lambda C, stride, affine: PoolBN('avg', C, 3, stride, 1, affine=affine),
     'AveP': lambda C, stride, affine: PoolBN('avg', C, 3, stride, 1, affine=affine),
     'MaxPF': lambda C, stride, affine: PoolBN('max', C, 3, stride, 1, affine=affine),
@@ -13,6 +13,18 @@ OPS = {
     'Conv3': lambda C, stride, affine: StdConv(C, C, 3, stride, 1, affine=affine),
     'Conv5F': lambda C, stride, affine: StdConv(C, C, 5, stride, 2, affine=affine),
     'Conv5': lambda C, stride, affine: StdConv(C, C, 5, stride, 2, affine=affine),
+}
+
+
+darts_operations = {
+    'avg_pool_3x3': lambda C, stride, affine: PoolBN('avg', C, 3, stride, 1, affine=affine),
+    'max_pool_3x3': lambda C, stride, affine: PoolBN('max', C, 3, stride, 1, affine=affine),
+    'sep_conv_3x3': lambda C, stride, affine: SepConv(C, C, 3, stride, 1, affine=affine),
+    'sep_conv_5x5': lambda C, stride, affine: SepConv(C, C, 5, stride, 2, affine=affine),
+    'sep_conv_7x7': lambda C, stride, affine: SepConv(C, C, 7, stride, 3, affine=affine),
+    'dil_conv_3x3': lambda C, stride, affine: DilConv(C, C, 3, stride, 2, 2, affine=affine), # 5x5
+    'dil_conv_5x5': lambda C, stride, affine: DilConv(C, C, 5, stride, 4, 2, affine=affine), # 9x9
+    'conv_7x1_1x7': lambda C, stride, affine: FacConv(C, C, 7, stride, 3, affine=affine)
 }
 
 
@@ -94,8 +106,8 @@ class FacConv(nn.Module):
         super().__init__()
         self.net = nn.Sequential(
             nn.ReLU(),
-            nn.Conv2d(C_in, C_in, (kernel_length, 1), stride, padding, bias=False),
-            nn.Conv2d(C_in, C_out, (1, kernel_length), stride, padding, bias=False),
+            nn.Conv2d(C_in, C_in, (kernel_length, 1), stride, (padding, 0), bias=False),
+            nn.Conv2d(C_in, C_out, (1, kernel_length), stride, (0, padding), bias=False),
             nn.BatchNorm2d(C_out, affine=affine)
         )
 
@@ -185,17 +197,18 @@ class FactorizedReduce(nn.Module):
         return out
 
 
-class MixedOp(nn.Module):
+class OperationSelector(nn.Module):
     """ Mixed operation """
-    def __init__(self, c_labels, C):
+    def __init__(self, c_labels, C, operations_type):
         super().__init__()
-        self._ops = OPS[c_labels](C, 1, affine=False)
+        if operations_type == "standard":
+            self._ops = standard_operations[c_labels](C, 1, affine=False)
+        elif operations_type == "darts":
+            self._ops = darts_operations[c_labels](C, 1, affine=False)
 
     def forward(self, x):
         """
         Args:
             x: input
         """
-        # 对 x 执行每个操作, 并且乘以权重 w, 最后 8 种操作的结果求和
-        # w1 * op1(x) + w2 * op2(x) + ... + w8 * op8(x)  
         return self._ops(x)
