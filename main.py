@@ -1,71 +1,56 @@
 import time
 import numpy as np
-from common import init_log
+from utils import get_logger
 import torch
-from dataset.dataset import prepare_dataset, read_dataset_info
-from config.main_config import SearchConfig
-from models.tree_structure import initialize_standard_operations, initialize_darts_operations, gp_process
+from config import SearchConfig
+from models.gp_algorithm import GPAlgorithm
 import warnings
+import datetime
+import os
 
 warnings.filterwarnings('ignore')
 
 
 def main():
-    device = torch.device("cuda")
     torch.manual_seed(0)
     np.random.seed(0)
 
     config = SearchConfig()
-    data_name = config.data_name
-    data_path = config.data_path
 
-    # logger = init_log(data_name)
-    train_dataset, val_dataset, test_dataset, all_train_dataset = prepare_dataset(data_path, data_name)
-    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=16, shuffle=True)
-    val_loader = torch.utils.data.DataLoader(val_dataset, batch_size=16, shuffle=True)
-    test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=16, shuffle=False)
-    all_train_loader = torch.utils.data.DataLoader(all_train_dataset, batch_size=16, shuffle=False)
+    current_time = datetime.datetime.now()
+    timestamp = current_time.strftime("%Y%m%d-%H-%M-%S")
+
+    exp_title = f"{timestamp}_{config.data_name}"
+    logger = get_logger(os.path.join(config.log_path, f"{exp_title}.log"))
+
+    result_folder = os.path.join(config.result_path, f"{exp_title}")
+    os.makedirs(result_folder)
+
     rounds_experiment = config.rounds_experiment
-
-    logger = init_log(data_name)
-    num_classes = read_dataset_info(data_path, data_name, logger)
-    result = []
-    if config.network_operations == "standard":
-        toolbox = initialize_standard_operations(config, device, train_loader, val_loader, test_loader,
-                                                 all_train_loader, num_classes=num_classes)
-    elif config.network_operations == "darts":
-        toolbox = initialize_darts_operations(config, device, train_loader, val_loader, test_loader,
-                                                 all_train_loader, num_classes=num_classes)
-    else:
-        raise Exception("Invalid Network Operations!")
-
-    # logger.info("Data_name: {}".format(data_name))
-    logger.info("GP Info:")
-    logger.info("Population: {}".format(config.population))
-    logger.info("Generations: {}".format(config.generations))
     logger.info("Experiment_rounds: {}".format(rounds_experiment))
-    logger.info("cxProb: {}, mutProb: {}, elitismProb: {}, maxDepth: {}".format(config.cxProb, config.mutProb,
-                                                                                config.elitismProb, config.maxDepth))
+    result = []
+
+    gp_algorithm = GPAlgorithm(config, logger)
+
     logger.info('===============================================================================================')
     for exp_round in range(1, rounds_experiment):
         logger.info("Current round: {}".format(exp_round))
-        beginTime = time.process_time()
+        round_folder = os.path.join(result_folder, f"{exp_round}")
+        os.makedirs(round_folder)
 
-        testResults = gp_process(config=config, toolbox=toolbox, logger=logger)
-        endTime = time.process_time()
-        trainTime = endTime - beginTime
-
-        # logger.info('Best individual {}'.format(hof[0]))
-        result.append(testResults)
-        logger.info('Test results: {}'.format(testResults))
-        logger.info('Train time: {}'.format(trainTime))
+        begin_time = time.process_time()
+        test_results = gp_algorithm.run(round_folder)
+        end_time = time.process_time()
+        train_time = end_time - begin_time
+        result.append(test_results)
+        logger.info('Test results: {}'.format(test_results))
+        logger.info('Train time: {}'.format(train_time))
         logger.info('Complete round: {}'.format(exp_round))
         logger.info('===============================================================================================')
     for ei, r in enumerate(result):
         logger.info("Epoch {} Result: {}".format(ei, r))
 
     result_np = np.array(result)
-    # logger.info("Average: {}".format(round(sum(result) / len(result)), 2))
     logger.info("Mean: {}".format(np.mean(result_np)))
     logger.info("Std: {}".format(np.std(result_np)))
 

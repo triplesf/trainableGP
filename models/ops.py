@@ -1,7 +1,6 @@
 """ Operations """
 import torch
 import torch.nn as nn
-import genotypes as gt
 
 
 standard_operations = {
@@ -25,6 +24,17 @@ darts_operations = {
     'dil_conv_3x3': lambda C, stride, affine: DilConv(C, C, 3, stride, 2, 2, affine=affine), # 5x5
     'dil_conv_5x5': lambda C, stride, affine: DilConv(C, C, 5, stride, 4, 2, affine=affine), # 9x9
     'conv_7x1_1x7': lambda C, stride, affine: FacConv(C, C, 7, stride, 3, affine=affine)
+}
+
+
+single_operations = {
+    'MaxP': lambda C, stride, affine: nn.MaxPool2d(3, stride, 1),
+    'AveP': lambda C, stride, affine: nn.AvgPool2d(3, stride, 1, count_include_pad=False),
+    'RELU': lambda C, stride, affine: nn.ReLU(),
+    'Conv3': lambda C, stride, affine: nn.Conv2d(C, C, 3, stride, 1, bias=False),
+    'Conv5': lambda C, stride, affine: nn.Conv2d(C, C, 5, stride, 2, bias=False),
+    'Conv7': lambda C, stride, affine: nn.Conv2d(C, C, 7, stride, 3, bias=False),
+    'BN': lambda C, stride, affine: nn.BatchNorm2d(C, affine=affine)
 }
 
 
@@ -205,6 +215,8 @@ class OperationSelector(nn.Module):
             self._ops = standard_operations[c_labels](C, 1, affine=False)
         elif operations_type == "darts":
             self._ops = darts_operations[c_labels](C, 1, affine=False)
+        elif operations_type == "single":
+            self._ops = single_operations[c_labels](C, 1, affine=False)
 
     def forward(self, x):
         """

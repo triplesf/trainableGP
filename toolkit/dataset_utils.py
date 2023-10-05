@@ -142,7 +142,7 @@ def create_cifar10_test(root, output_dir):
 
 # Example usage
 root_directory = '../dataset/raw/cifar10'  # Root directory of the CIFAR-10 dataset
-samples_per_class = 20     # Number of samples to select per class
+samples_per_class = 320     # Number of samples to select per class
 output_directory = '../dataset/processed/cifar10'  # Directory to save .npy files
 
 create_cifar10_test(root_directory, output_directory)

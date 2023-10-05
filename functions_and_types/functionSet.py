@@ -3,6 +3,7 @@ from pylab import *
 from scipy import ndimage
 import skimage
 
+
 def sqrt(left):
     with numpy.errstate(divide='ignore',invalid='ignore'):
         x = numpy.sqrt(left,)
@@ -13,8 +14,10 @@ def sqrt(left):
             x = 1
     return x
 
+
 def relu(left):
     return (abs(left)+left)/2
+
 
 def addZerosPad(final,current):
     M,N=final.shape
@@ -32,6 +35,7 @@ def addZerosPad(final,current):
     current=numpy.concatenate((PLeft,current,PRight),axis=1)
     return current
 
+
 def mis_match(img1,img2):
     w1,h1=img1.shape
     w2,h2=img2.shape
@@ -39,13 +43,16 @@ def mis_match(img1,img2):
     h=min(h1,h2)
     return img1[0:w,0:h],img2[0:w,0:h]
 
+
 def mixconadd(img1, w1,img2, w2):
     img11,img22=mis_match(img1,img2)
     return numpy.add(img11*w1,img22*w2)
 
+
 def mixconsub(img1, w1,img2, w2):
     img11,img22=mis_match(img1,img2)
     return numpy.subtract(img11*w1,img22*w2)
+
 
 def conVector(img):
     try: 
@@ -79,12 +86,14 @@ def ZeromaxP(left, kel1, kel2):
     zero_p=addZerosPad(left,current)
     return zero_p
 
+
 def random_filters(filter_size):
     filters = []
     for i in range(filter_size*filter_size):
         filters.append(numpy.random.randint(-5, 5))
         # filters.append(numpy.random.uniform(-5, 5))
     return filters
+
 
 # 添加空洞卷积
 def random_dfilters(filter_size):
@@ -97,11 +106,13 @@ def random_dfilters(filter_size):
         # filters.append(numpy.random.uniform(-5, 5))
     return filters
 
+
 def root_conVector2(img1, img2):
     image1=conVector(img1)
     image2=conVector(img2)
     feature_vector=numpy.concatenate((image1, image2),axis=0)
     return feature_vector
+
 
 def root_conVector3(img1, img2, img3):
     image1=conVector(img1)
@@ -110,6 +121,7 @@ def root_conVector3(img1, img2, img3):
     feature_vector=numpy.concatenate((image1, image2, image3),axis=0)
     return feature_vector
 
+
 def root_conVector4(img1, img2, img3, img4):
     image1=conVector(img1)
     image2=conVector(img2)
@@ -117,6 +129,7 @@ def root_conVector4(img1, img2, img3, img4):
     image4=conVector(img4)
     feature_vector=numpy.concatenate((image1, image2, image3, image4),axis=0)
     return feature_vector
+
 
 def conv_filters(image, filters):
     length = len(filters)

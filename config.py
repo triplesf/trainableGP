@@ -40,7 +40,9 @@ class SearchConfig(BaseConfig):
     def build_parser(self):
         parser = get_parser("Search config")
         parser.add_argument('--data_name', type=str, default="f1_ours", help='data name')
-        parser.add_argument('--data_path', type=str, default="dataset/processed/f1", help='data name')
+        parser.add_argument('--data_path', type=str, default="dataset/processed/f1", help='data path')
+        parser.add_argument('--log_path', type=str, default="log", help='log file path')
+        parser.add_argument('--result_path', type=str, default="results", help='result folder path')
         parser.add_argument('--batch_size', type=int, default=16, help='batch size')
         parser.add_argument('--population', type=int, default=100, help='population')
         parser.add_argument('--gpus', default='0', help='gpu device ids separated by comma. '
@@ -56,9 +58,10 @@ class SearchConfig(BaseConfig):
         parser.add_argument('--seed', type=int, default=0, help='random seed')
         parser.add_argument('--classes_number', type=int, default=2, help='the number of classes')
         parser.add_argument('--rounds_experiment', type=int, default=10, help='the rounds of experiments')
+        parser.add_argument('--num_hidden_layers', type=int, default=16, help='the number of hidden_layers')
 
-        parser.add_argument('--network_operations', choices=['standard', 'darts'], type=str, default="standard",
-                            help='Choose between "standard" or "darts" mode (e.g., --mode standard)')
+        parser.add_argument('--network_operations', choices=['standard', 'darts', 'single'], type=str, default="standard",
+                            help='Choose between "standard", "darts" or "single"')
 
         return parser
 

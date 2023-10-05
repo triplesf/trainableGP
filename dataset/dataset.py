@@ -36,7 +36,71 @@ class MyDataset(Dataset):
         return self.data.shape[0]  # 返回数据的总个数
 
 
+class CustomDataset(Dataset):
+    def __init__(self, image_file, label_file, train_split=True, train=True, transform=None):
+        self.images = np.load(image_file)
+        self.labels = np.load(label_file)
+        self.transform = transform
+
+        # 如果需要划分数据集为训练集和验证集
+        if train_split:
+            unique_labels = np.unique(self.labels)
+            train_indices = []
+            val_indices = []
+
+            for label in unique_labels:
+                label_indices = np.where(self.labels == label)[0]
+                np.random.shuffle(label_indices)
+                split_idx = int(len(label_indices) * 0.8)  # 80% 训练集，20% 验证集
+                train_indices.extend(label_indices[:split_idx])
+                val_indices.extend(label_indices[split_idx:])
+
+            if train:
+                self.images = self.images[train_indices]
+                self.labels = self.labels[train_indices]
+            else:
+                self.images = self.images[val_indices]
+                self.labels = self.labels[val_indices]
+
+    def __len__(self):
+        return len(self.images)
+
+    def __getitem__(self, idx):
+        image = self.images[idx]
+        label = self.labels[idx]
+
+        if self.transform:
+            image = self.transform(image)
+
+        return image, label
+
+
 def prepare_dataset(data_root, data_name):
+    train_dataset_path = os.path.join(data_root, data_name)
+    test_dataset_path = os.path.join(data_root, data_name.split('_')[0])
+    train_data_path = train_dataset_path+'_train_data.npy'
+    train_label_path = train_dataset_path+'_train_label.npy'
+    test_data_path = test_dataset_path+'_test_data.npy'
+    test_label_path = test_dataset_path+'_test_label.npy'
+
+    image_transform = transforms.Compose([
+        transforms.ToTensor(),  # 转换为张量
+        transforms.Normalize(mean=[0.5], std=[0.5])  # 标准化
+    ])
+
+    # 创建训练集和验证集的 Dataset 实例
+    train_dataset = CustomDataset(image_file=train_data_path, label_file=train_label_path, train_split=True,
+                                  train=True, transform=image_transform)
+    val_dataset = CustomDataset(image_file=train_data_path, label_file=train_label_path, train_split=True,
+                                train=False, transform=image_transform)
+    full_train_dataset = CustomDataset(image_file=train_data_path, label_file=train_label_path, train_split=False,
+                                       transform=image_transform)
+    test_dataset = CustomDataset(image_file=test_data_path, label_file=test_label_path, train_split=False,
+                                 transform=image_transform)
+    return train_dataset, val_dataset, test_dataset, full_train_dataset
+
+
+def prepare_dataset_old(data_root, data_name):
     train_dataset_path = os.path.join(data_root, data_name)
     test_dataset_path = os.path.join(data_root, data_name.split('_')[0])
 
