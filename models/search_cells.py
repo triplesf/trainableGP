@@ -18,12 +18,12 @@ class SearchCell(nn.Module):
     """ Cell for search
     Each edge is mixed and continuous relaxed.
     """
-    def __init__(self, expr, operations_type, n_classes=2, num_hidden_layers=16):
+    def __init__(self, expr, operations_type, n_classes=2, num_hidden_layers=16, input_channels=1):
         super().__init__()
         nodes, edges, labels, input_nodes, w_nodes = self.create_graph(expr)
         C_cur = num_hidden_layers    # 当前Sequential模块的输出通道数
         self.stem = nn.Sequential(
-            nn.Conv2d(1, C_cur, 3, 1, 1, bias=False),    # 前三个参数分别是输入图片的通道数，卷积核的数量，卷积核的大小
+            nn.Conv2d(input_channels, C_cur, 3, 1, 1, bias=False),    # 前三个参数分别是输入图片的通道数，卷积核的数量，卷积核的大小
             nn.BatchNorm2d(C_cur)
             # BatchNorm2d 对 minibatch 3d 数据组成的 4d 输入进行batchnormalization操作，num_features为(N,C,H,W)的C
         )
@@ -81,8 +81,8 @@ class SearchCell(nn.Module):
             templates = next_templates
 
         C_cur = C_cur * len(self.dag)
-
         self.gap = nn.AdaptiveAvgPool2d(1)  # 构建一个平均池化层，output size是1x1
+        self.dropout = nn.Dropout(0.7)
         self.linear = nn.Linear(C_cur, n_classes)
 
     def create_graph(self, expr):
@@ -149,6 +149,7 @@ class SearchCell(nn.Module):
 
         out = self.gap(s1)
         out = out.view(out.size(0), -1)  # flatten
+        out = self.dropout(out)
         logits = self.linear(out)
         return logits
 

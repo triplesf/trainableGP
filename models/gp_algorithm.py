@@ -14,27 +14,20 @@ from deap import tools
 from visualize import draw_graph
 from utils import write_summary
 from visualize import plot_fitness_curve, plot_fitness_boxplot
-from dataset.dataset import prepare_dataset, read_dataset_info
+from dataset.dataset import DataLoaderManager
 from torchviz import make_dot
 
 
 class GPAlgorithm:
     def __init__(self, config, logger):
         self.config = config
-        data_name = config.data_name
-        data_path = config.data_path
-        self.num_classes = read_dataset_info(data_path, data_name, logger)
-
-        train_dataset, val_dataset, test_dataset, all_train_dataset = prepare_dataset(data_path, data_name)
-        self.train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=config.batch_size, shuffle=True)
-        self.val_loader = torch.utils.data.DataLoader(val_dataset, batch_size=config.batch_size, shuffle=True)
-        self.test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=config.batch_size, shuffle=False)
-        self.all_train_loader = torch.utils.data.DataLoader(all_train_dataset, batch_size=config.batch_size,
-                                                            shuffle=False)
-
         self.device = torch.device("cuda")
         self.logger = logger
         self.toolbox = self.initialize_gp_operations()
+
+        dataloader_manager = DataLoaderManager(config, logger)
+        self.train_loader, self.val_loader, self.test_loader, self.all_train_loader, self.class_num = \
+            dataloader_manager.get_dataloader()
 
         logger.info("GP Info:")
         logger.info("Population: {}".format(config.population))
@@ -42,28 +35,94 @@ class GPAlgorithm:
         logger.info("cxProb: {}, mutProb: {}, elitismProb: {}, maxDepth: {}".format(config.cxProb, config.mutProb,
                                                                                     config.elitismProb,
                                                                                     config.maxDepth))
+        self.val_num = config.samples_per_class * self.class_num * 0.2
+        self.dataloader_manager = dataloader_manager
 
     def eval_train(self, individual):
         config = self.config
         device = self.device
-        model = SearchCell(individual, config.network_operations, n_classes=self.num_classes,
+        if "gray" in config.data_name:
+            input_channels = 1
+        else:
+            input_channels = 3
+
+        if not config.cross_validation:
+            train_loader_list = [self.train_loader]
+            val_loader_list = [self.val_loader]
+            loader_list = zip(train_loader_list, val_loader_list)
+        else:
+            loader_list = self.dataloader_manager.cross_validation_generator()
+
+        best_accuracy_list = []
+        for train_loader, val_loader in loader_list:
+            model = SearchCell(individual, config.network_operations, n_classes=self.class_num,
+                               num_hidden_layers=config.num_hidden_layers, input_channels=input_channels)
+            model = model.to(device)
+            optimizer = torch.optim.Adam(model.parameters(), lr=0.0001)
+            loss_function = nn.CrossEntropyLoss()
+
+            best_val_loss = float('inf')
+            patience = 5
+            counter = 0
+
+            total_epochs = config.epochs
+            start_epoch = total_epochs // 4
+            best_accuracy = 0.0
+
+            for epoch in range(total_epochs):
+                # train
+                model.train()
+                for step, data in enumerate(train_loader):
+                    images, labels = data
+                    optimizer.zero_grad()
+                    outputs = model(images.to(device))
+                    loss = loss_function(outputs, labels.to(device))
+                    loss.backward()
+                    optimizer.step()
+
+                if epoch >= start_epoch:
+                    model.eval()
+                    val_loss = 0.0
+                    acc = 0.0
+                    with torch.no_grad():
+                        for val_images, val_labels in val_loader:
+                            outputs = model(val_images.to(device))
+                            loss = loss_function(outputs, val_labels.to(device))
+                            val_loss += loss.item()
+                            predict_y = torch.max(outputs, dim=1)[1]
+                            acc += torch.eq(predict_y, val_labels.to(device)).sum().item()
+
+                    val_loss /= self.val_num
+                    accuracy = acc / self.val_num
+
+                    # print(f'Epoch [{epoch + 1}/100] - Val Loss: {val_loss:.4f}, Accuracy: {accuracy * 100:.2f}%')
+
+                    if val_loss < best_val_loss:
+                        best_val_loss = val_loss
+                        best_accuracy = accuracy
+                        counter = 0
+                    else:
+                        counter += 1
+                        if counter >= patience:
+                            # print("Early stopping")
+                            break
+            best_accuracy_list.append(best_accuracy)
+        return np.mean(np.array(best_accuracy_list)),
+
+    def eval_train_full(self, individual):
+        config = self.config
+        device = self.device
+        model = SearchCell(individual, config.network_operations, n_classes=self.class_num,
                            num_hidden_layers=config.num_hidden_layers)
         model = model.to(device)
-        optimizer = torch.optim.Adam(model.parameters(), lr=0.0002)
+        optimizer = torch.optim.Adam(model.parameters())
         loss_function = nn.CrossEntropyLoss()
-
-        best_val_loss = float('inf')
-        patience = 5  # 连续5个周期没有改善就提前结束
-        counter = 0
-
         total_epochs = config.epochs
-        start_epoch = total_epochs // 4
-        best_accuracy = 0.0
 
         for epoch in range(total_epochs):
             # train
             model.train()
-            for step, data in enumerate(self.train_loader):
+            for step, data in enumerate(self.all_train_loader):
                 images, labels = data
                 optimizer.zero_grad()
                 outputs = model(images.to(device))
@@ -71,46 +130,33 @@ class GPAlgorithm:
                 loss.backward()
                 optimizer.step()
 
-            if epoch >= start_epoch:
-                model.eval()
-                val_loss = 0.0
-                acc = 0.0
-                with torch.no_grad():
-                    for val_images, val_labels in self.val_loader:
-                        outputs = model(val_images.to(device))
-                        loss = loss_function(outputs, val_labels.to(device))
-                        val_loss += loss.item()
-                        predict_y = torch.max(outputs, dim=1)[1]
-                        acc += torch.eq(predict_y, val_labels.to(device)).sum().item()
+        model.eval()
 
-                val_loss /= len(self.val_loader.dataset)
-                accuracy = acc / len(self.val_loader.dataset)
+        acc = 0.0
+        with torch.no_grad():
+            for val_images, val_labels in self.val_loader:
+                outputs = model(val_images.to(device))
+                predict_y = torch.max(outputs, dim=1)[1]
+                acc += torch.eq(predict_y, val_labels.to(device)).sum().item()
 
-                # print(f'Epoch [{epoch + 1}/100] - Val Loss: {val_loss:.4f}, Accuracy: {accuracy * 100:.2f}%')
-
-                if val_loss < best_val_loss:
-                    best_val_loss = val_loss
-                    best_accuracy = accuracy
-                    counter = 0
-                else:
-                    counter += 1
-                    if counter >= patience:
-                        # print("Early stopping")
-                        break
-
-        return best_accuracy,
+        accuracy = acc / len(self.test_loader.dataset)
+        return accuracy,
 
     def eval_test(self, individual, round_folder=None):
         config = self.config
         device = self.device
-        model = SearchCell(individual, config.network_operations, n_classes=self.num_classes,
-                           num_hidden_layers=config.num_hidden_layers)
+        if "gray" in config.data_name:
+            input_channels = 1
+        else:
+            input_channels = 3
+        model = SearchCell(individual, config.network_operations, n_classes=self.class_num,
+                           num_hidden_layers=config.num_hidden_layers, input_channels=input_channels)
         model = model.to(device)
-        optimizer = torch.optim.Adam(model.parameters(), lr=0.0002)
+        optimizer = torch.optim.Adam(model.parameters(), lr=0.0001)
         loss_function = nn.CrossEntropyLoss()
 
         best_val_loss = float('inf')
-        patience = 5  # 连续5个周期没有改善就提前结束
+        patience = 20  # 连续5个周期没有改善就提前结束
         counter = 0
 
         total_epochs = config.epochs
@@ -118,7 +164,7 @@ class GPAlgorithm:
 
         best_model_state_dict = None
 
-        for epoch in range(config.epochs):
+        for epoch in range(400):
             # train
             model.train()
             # train_bar = tqdm(train_loader)
@@ -139,12 +185,11 @@ class GPAlgorithm:
                         outputs = model(val_images.to(device))
                         loss = loss_function(outputs, val_labels.to(device))
                         val_loss += loss.item()
-                        predict_y = torch.max(outputs, dim=1)[1]
+                        # predict_y = torch.max(outputs, dim=1)[1]
                         # acc += torch.eq(predict_y, val_labels.to(device)).sum().item()
 
-                val_loss /= len(self.val_loader.dataset)
+                val_loss /= self.val_num
                 # accuracy = acc / len(self.val_loader.dataset)
-
                 # print(f'Epoch [{epoch + 1}/100] - Val Loss: {val_loss:.4f}, Accuracy: {accuracy * 100:.2f}%')
 
                 if val_loss < best_val_loss:
@@ -155,10 +200,55 @@ class GPAlgorithm:
                 else:
                     counter += 1
                     if counter >= patience:
-                        # print("Early stopping")
+                        # print(f"Early stopping {epoch}")
                         break
 
         model.load_state_dict(best_model_state_dict)
+        model.eval()
+
+        acc = 0.0
+        with torch.no_grad():
+            for test_images, test_labels in self.test_loader:
+                outputs = model(test_images.to(device))
+                predict_y = torch.max(outputs, dim=1)[1]
+                acc += torch.eq(predict_y, test_labels.to(device)).sum().item()
+
+        test_accuracy = acc / len(self.test_loader.dataset)
+
+        if round_folder:
+            test_sample_batch = next(iter(self.test_loader))
+            input_sample = test_sample_batch[0]
+            _, channel, height, width = input_sample.size()
+            write_summary(round_folder, model, (channel, height, width))
+
+            output_file = os.path.join(round_folder, 'model_graph')
+            dot = make_dot(model(test_sample_batch[0].to(device)), params=dict(model.named_parameters()))
+            dot.format = 'png'
+            dot.render(output_file)
+        return test_accuracy
+
+    def eval_full_test(self, individual, round_folder=None):
+        config = self.config
+        device = self.device
+        model = SearchCell(individual, config.network_operations, n_classes=self.class_num,
+                           num_hidden_layers=config.num_hidden_layers)
+        model = model.to(device)
+        optimizer = torch.optim.Adam(model.parameters(), lr=0.0002)
+        loss_function = nn.CrossEntropyLoss()
+        total_epochs = config.epochs
+
+        for epoch in range(400):
+            # train
+            model.train()
+            # train_bar = tqdm(train_loader)
+            for step, data in enumerate(self.all_train_loader):
+                images, labels = data
+                optimizer.zero_grad()
+                outputs = model(images.to(device))
+                loss = loss_function(outputs, labels.to(device))
+                loss.backward()
+                optimizer.step()
+
         model.eval()
 
         acc = 0.0
@@ -269,7 +359,7 @@ class GPAlgorithm:
 
         primitive_set.addPrimitive(None, [Img, Img], Vector, name='Root2')
         primitive_set.addPrimitive(None, [Img, Img, Img], Vector, name='Root3')
-        primitive_set.addPrimitive(None, [Img, Img, Img, Img], Vector, name='Root4')
+        # primitive_set.addPrimitive(None, [Img, Img, Img, Img], Vector, name='Root4')
 
         # Pooling functions at the Pooling layer.
         primitive_set.addPrimitive(None, [Img], Img, name='MaxP')  # max-pooling operator
