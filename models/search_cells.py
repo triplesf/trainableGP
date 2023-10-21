@@ -2,6 +2,8 @@ import torch
 import torch.nn as nn
 from models.ops import OperationSelector
 from models import gp_tree
+seed = 42
+torch.manual_seed(seed)
 
 
 class ParallelSequentialModule(nn.ModuleList):
@@ -18,7 +20,7 @@ class SearchCell(nn.Module):
     """ Cell for search
     Each edge is mixed and continuous relaxed.
     """
-    def __init__(self, expr, operations_type, n_classes=2, num_hidden_layers=16, input_channels=1):
+    def __init__(self, expr, operations_type, n_classes=2, num_hidden_layers=16, input_channels=1, use_dropout=False):
         super().__init__()
         nodes, edges, labels, input_nodes, w_nodes = self.create_graph(expr)
         C_cur = num_hidden_layers    # 当前Sequential模块的输出通道数
@@ -83,6 +85,7 @@ class SearchCell(nn.Module):
         C_cur = C_cur * len(self.dag)
         self.gap = nn.AdaptiveAvgPool2d(1)  # 构建一个平均池化层，output size是1x1
         self.dropout = nn.Dropout(0.7)
+        self.use_dropout = use_dropout
         self.linear = nn.Linear(C_cur, n_classes)
 
     def create_graph(self, expr):
@@ -149,7 +152,8 @@ class SearchCell(nn.Module):
 
         out = self.gap(s1)
         out = out.view(out.size(0), -1)  # flatten
-        out = self.dropout(out)
+        if self.use_dropout:
+            out = self.dropout(out)
         logits = self.linear(out)
         return logits
 

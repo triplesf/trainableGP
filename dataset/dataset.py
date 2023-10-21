@@ -6,7 +6,12 @@ import random
 from torchvision import datasets, transforms
 import torchvision
 from sklearn.model_selection import KFold
-# torch.manual_seed(1)
+
+
+dataset_type = {
+    "cifar10": torchvision.datasets.CIFAR10,
+    "fmnist": torchvision.datasets.FashionMNIST
+}
 
 
 class CustomDataset(Dataset):
@@ -79,10 +84,10 @@ class DataLoaderManager:
             self.class_num = self.read_dataset_info_from_file()
 
         elif config.dataset_source == "torch":
-            self.train_dataset = torchvision.datasets.CIFAR10(root=config.data_path, train=True, download=False,
-                                                              transform=transform)
-            self.test_dataset = torchvision.datasets.CIFAR10(root=config.data_path, train=False, download=False,
-                                                             transform=transform)
+            self.train_dataset = dataset_type[config.data_name](root=config.data_path, train=True, download=False,
+                                                                transform=transform)
+            self.test_dataset = dataset_type[config.data_name](root=config.data_path, train=False, download=False,
+                                                               transform=transform)
             self.class_num = self.read_dataset_info_by_torch()
 
     def get_selected_indices(self):
@@ -104,6 +109,7 @@ class DataLoaderManager:
     def get_dataloader(self):
         train_dataset = self.train_dataset
         test_dataset = self.test_dataset
+        batch_size = self.config.batch_size
         train_indices = []
         valid_indices = []
         class_indices, selected_indices = self.get_selected_indices()
@@ -118,10 +124,10 @@ class DataLoaderManager:
         valid_sampler = torch.utils.data.sampler.SubsetRandomSampler(valid_indices)
         train_full_sampler = torch.utils.data.sampler.SubsetRandomSampler(selected_indices)
 
-        train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=16, sampler=train_sampler)
-        valid_loader = torch.utils.data.DataLoader(train_dataset, batch_size=16, sampler=valid_sampler)
-        test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=16, shuffle=False)
-        train_full_loader = torch.utils.data.DataLoader(train_dataset, batch_size=16, sampler=train_full_sampler)
+        train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, sampler=train_sampler)
+        valid_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, sampler=valid_sampler)
+        test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
+        train_full_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, sampler=train_full_sampler)
 
         return train_loader, valid_loader, test_loader, train_full_loader, self.class_num
 
@@ -211,11 +217,7 @@ class DataLoaderManager:
     def cross_validation_generator(self):
         kf = KFold(n_splits=5, shuffle=True)
         ori_train_dataset = self.train_dataset
-        test_dataset = self.test_dataset
-        train_indices = []
         _, selected_indices = self.get_selected_indices()
-        # test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=16, shuffle=False)
-
         for train_index, val_index in kf.split(selected_indices):
             train_dataset = Subset(ori_train_dataset, [i for i in train_index])
             val_dataset = Subset(ori_train_dataset, [i for i in val_index])

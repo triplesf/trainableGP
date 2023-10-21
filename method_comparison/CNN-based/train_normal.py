@@ -8,6 +8,10 @@ import torchvision
 import random
 import numpy as np
 
+seed = 42
+torch.manual_seed(seed)
+np.random.seed(seed)
+
 
 def reset_weights(model):
     for layer in model.children():
@@ -19,7 +23,7 @@ def reset_weights(model):
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-samples_per_class = 20
+samples_per_class = 10
 
 transform = transforms.Compose([
     # transforms.RandomHorizontalFlip(),
@@ -60,7 +64,7 @@ for exp_round in range(10):
                                                sampler=torch.utils.data.sampler.SubsetRandomSampler(selected_indices))
     test_loader = torch.utils.data.DataLoader(testset, batch_size=32, shuffle=False)
 
-    for epoch in range(800):  # 训练100个epoch
+    for epoch in range(400):
         running_loss = 0.0
         for i, data in enumerate(train_loader, 0):
             inputs, labels = data

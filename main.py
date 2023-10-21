@@ -9,12 +9,13 @@ import datetime
 import os
 
 warnings.filterwarnings('ignore')
+seed = 42
+torch.manual_seed(seed)
+np.random.seed(seed)
 
 
 def main():
     torch.manual_seed(0)
-    np.random.seed(0)
-
     config = SearchConfig()
 
     current_time = datetime.datetime.now()

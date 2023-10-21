@@ -7,7 +7,6 @@ import torch.nn as nn
 import torch.optim as optim
 from torchvision import transforms, datasets
 from tqdm import tqdm
-from dataset.dataset import prepare_dataset, read_dataset_info
 from model import resnet34
 
 

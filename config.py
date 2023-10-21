@@ -49,7 +49,7 @@ class SearchConfig(BaseConfig):
                             default="torch",
                             help='Choose between "numpy" or "torch" for dataset source')
         parser.add_argument('--elitismProb', type=float, default=0.05, help='Elitism probability')
-        parser.add_argument('--epochs', type=int, default=5, help='# of training epochs')
+        parser.add_argument('--epochs', type=int, default=20, help='# of training epochs')
         parser.add_argument('--gpus', default='0', help='GPU device ids separated by comma. '
                             '`all` indicates use all GPUs')
         parser.add_argument('--generations', type=int, default=50, help='Number of generations')
@@ -67,6 +67,7 @@ class SearchConfig(BaseConfig):
         parser.add_argument('--rounds_experiment', type=int, default=10, help='Number of rounds of experiments')
         parser.add_argument('--samples_per_class', type=int, default=20, help='Number of samples per class')
         parser.add_argument('--seed', type=int, default=0, help='Random seed')
+        parser.add_argument('--test_train_epochs', type=int, default=400, help='# of training epochs')
 
         return parser
 

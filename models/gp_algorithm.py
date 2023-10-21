@@ -18,6 +18,67 @@ from dataset.dataset import DataLoaderManager
 from torchviz import make_dot
 
 
+def eval_train_model(model, loader_list, val_num):
+    device = torch.device("cuda")
+    model = model.to(device)
+
+    # loader_list = dataloader_manager.cross_validation_generator()
+
+    best_accuracy_list = []
+    for train_loader, val_loader in loader_list:
+
+        optimizer = torch.optim.Adam(model.parameters(), lr=0.0001)
+        loss_function = nn.CrossEntropyLoss()
+
+        best_val_loss = float('inf')
+        patience = 5
+        counter = 0
+
+        total_epochs = 20
+        start_epoch = total_epochs // 4
+        best_accuracy = 0.0
+
+        for epoch in range(total_epochs):
+            # train
+            model.train()
+            for step, data in enumerate(train_loader):
+                images, labels = data
+                optimizer.zero_grad()
+                outputs = model(images.to(device))
+                loss = loss_function(outputs, labels.to(device))
+                loss.backward()
+                optimizer.step()
+
+            if epoch >= start_epoch:
+                model.eval()
+                val_loss = 0.0
+                acc = 0.0
+                with torch.no_grad():
+                    for val_images, val_labels in val_loader:
+                        outputs = model(val_images.to(device))
+                        loss = loss_function(outputs, val_labels.to(device))
+                        val_loss += loss.item()
+                        predict_y = torch.max(outputs, dim=1)[1]
+                        acc += torch.eq(predict_y, val_labels.to(device)).sum().item()
+
+                val_loss /= val_num
+                accuracy = acc / val_num
+
+                # print(f'Epoch [{epoch + 1}/100] - Val Loss: {val_loss:.4f}, Accuracy: {accuracy * 100:.2f}%')
+
+                if val_loss < best_val_loss:
+                    best_val_loss = val_loss
+                    best_accuracy = accuracy
+                    counter = 0
+                else:
+                    counter += 1
+                    if counter >= patience:
+                        # print("Early stopping")
+                        break
+        best_accuracy_list.append(best_accuracy)
+    return np.mean(np.array(best_accuracy_list)),
+
+
 class GPAlgorithm:
     def __init__(self, config, logger):
         self.config = config
@@ -152,7 +213,7 @@ class GPAlgorithm:
         model = SearchCell(individual, config.network_operations, n_classes=self.class_num,
                            num_hidden_layers=config.num_hidden_layers, input_channels=input_channels)
         model = model.to(device)
-        optimizer = torch.optim.Adam(model.parameters(), lr=0.0001)
+        optimizer = torch.optim.Adam(model.parameters(), lr=0.00001)
         loss_function = nn.CrossEntropyLoss()
 
         best_val_loss = float('inf')
@@ -163,8 +224,9 @@ class GPAlgorithm:
         start_epoch = total_epochs // 4
 
         best_model_state_dict = None
+        test_train_epoch = config.test_train_epochs
 
-        for epoch in range(400):
+        for epoch in range(test_train_epoch):
             # train
             model.train()
             # train_bar = tqdm(train_loader)
@@ -228,16 +290,22 @@ class GPAlgorithm:
         return test_accuracy
 
     def eval_full_test(self, individual, round_folder=None):
+        # self.logger.info(individual)
         config = self.config
         device = self.device
+        if "gray" in config.data_name:
+            input_channels = 1
+        else:
+            input_channels = 3
         model = SearchCell(individual, config.network_operations, n_classes=self.class_num,
-                           num_hidden_layers=config.num_hidden_layers)
+                           num_hidden_layers=config.num_hidden_layers, input_channels=input_channels,
+                           use_dropout=False)
         model = model.to(device)
-        optimizer = torch.optim.Adam(model.parameters(), lr=0.0002)
+        optimizer = torch.optim.Adam(model.parameters(), lr=0.0001)
         loss_function = nn.CrossEntropyLoss()
-        total_epochs = config.epochs
+        test_train_epoch = config.test_train_epochs
 
-        for epoch in range(400):
+        for epoch in range(test_train_epoch):
             # train
             model.train()
             # train_bar = tqdm(train_loader)
@@ -342,6 +410,8 @@ class GPAlgorithm:
         toolbox.register("population", tools.initRepeat, list, toolbox.individual)
         toolbox.register("compile", gp.compile, primitive_set=primitive_set)
         toolbox.register("mapp", futures.map)
+        # pool = multiprocessing.Pool(processes=2)
+        # toolbox.register("parallel", pool.map)
         toolbox.register("evaluate", self.eval_train)
         toolbox.register("select", tools.selTournament, tournsize=7)
         toolbox.register("selectElitism", tools.selBest)
@@ -351,12 +421,13 @@ class GPAlgorithm:
         toolbox.register("mutate_eph", gp.mutEphemeral, mode='all')
         toolbox.decorate("mate", gp.staticLimit(key=operator.attrgetter("height"), max_value=config.maxDepth))
         toolbox.decorate("mutate", gp.staticLimit(key=operator.attrgetter("height"), max_value=config.maxDepth))
-        toolbox.register("evaluate_test", self.eval_test)
+        toolbox.register("evaluate_test", self.eval_full_test)
         return toolbox
 
     def initialize_standard_operations(self):
         primitive_set = gp_tree.PrimitiveSetTyped('MAIN', [Img], Vector, prefix='Image')
 
+        primitive_set.addPrimitive(None, [Img], Vector, name='Root1')
         primitive_set.addPrimitive(None, [Img, Img], Vector, name='Root2')
         primitive_set.addPrimitive(None, [Img, Img, Img], Vector, name='Root3')
         # primitive_set.addPrimitive(None, [Img, Img, Img, Img], Vector, name='Root4')
@@ -380,6 +451,7 @@ class GPAlgorithm:
     def initialize_darts_operations(self):
         primitive_set = gp_tree.PrimitiveSetTyped('MAIN', [Img], Vector, prefix='Image')
 
+        primitive_set.addPrimitive(None, [Img], Vector, name='Root1')
         primitive_set.addPrimitive(None, [Img, Img], Vector, name='Root2')
         primitive_set.addPrimitive(None, [Img, Img, Img], Vector, name='Root3')
         primitive_set.addPrimitive(None, [Img, Img, Img, Img], Vector, name='Root4')
@@ -405,6 +477,7 @@ class GPAlgorithm:
     def initialize_single_operations(self):
         primitive_set = gp_tree.PrimitiveSetTyped('MAIN', [Img], Vector, prefix='Image')
 
+        primitive_set.addPrimitive(None, [Img], Vector, name='Root1')
         primitive_set.addPrimitive(None, [Img, Img], Vector, name='Root2')
         primitive_set.addPrimitive(None, [Img, Img, Img], Vector, name='Root3')
         primitive_set.addPrimitive(None, [Img, Img, Img, Img], Vector, name='Root4')
@@ -476,6 +549,23 @@ class GPAlgorithm:
         start_time = time.time()
         fitnesses = toolbox.mapp(toolbox.evaluate, population)
 
+        # if "gray" in config.data_name:
+        #     input_channels = 1
+        # else:
+        #     input_channels = 3
+        # device = torch.device("cuda")
+
+        # loader_list = self.dataloader_manager.cross_validation_generator()
+        # model_instances = [SearchCell(individual, config.network_operations, n_classes=self.class_num,
+        #                    num_hidden_layers=config.num_hidden_layers, input_channels=input_channels)  # .to(device)
+        #                    for individual in population]
+        # model_instances = [nn.DataParallel(model) for model in model_instances]
+        # with multiprocessing.Pool(processes=2) as pool:
+        #     partial_worker = partial(eval_train_model, loader_list=list(loader_list),
+        #                              val_num=self.val_num)
+        #     # compiled_ind = self.toolbox.compile(population)
+        #     fitnesses = pool.map(partial_worker, model_instances)
+
         for ind, fit in zip(population, fitnesses):
             ind.fitness.values = fit
         if halloffame is not None:
@@ -523,6 +613,17 @@ class GPAlgorithm:
                         ind += 1
             invalid_ind = [ind for ind in offspring if not ind.fitness.valid]
             fitnesses = toolbox.mapp(toolbox.evaluate, invalid_ind)
+
+            # model_instances = [SearchCell(individual, config.network_operations, n_classes=self.class_num,
+            #                               num_hidden_layers=config.num_hidden_layers, input_channels=input_channels)
+            #                    for individual in invalid_ind]
+            #
+            # with multiprocessing.Pool(processes=2) as pool:
+            #     partial_worker = partial(eval_train_model, loader_list=list(loader_list),
+            #                              val_num=self.val_num)
+            #     # compiled_ind = self.toolbox.compile(population)
+            #     fitnesses = pool.map(partial_worker, model_instances)
+
             for ind, fit in zip(invalid_ind, fitnesses):
                 ind.fitness.values = fit
 
@@ -537,7 +638,15 @@ class GPAlgorithm:
             for i in hof_store:
                 cop_po.append(i)
             population[:] = offspring
+
             test_results = toolbox.evaluate_test(halloffame[0])
+
+            # test_result = toolbox.evaluate_test(halloffame[0])
+            # logger.info(f"Test_result 1: {test_result}")
+            # test_result = toolbox.evaluate_test(halloffame[0])
+            # logger.info(f"Test_result 2: {test_result}")
+            # test_result = toolbox.evaluate_test(halloffame[0])
+            # logger.info(f"Test_result 3: {test_result}")
 
             record = stats.compile(population) if stats else {}
             for i, t in record.items():
@@ -564,6 +673,16 @@ class GPAlgorithm:
             plot_fitness_boxplot(vis_items, round_folder)
 
         test_result = toolbox.evaluate_test(halloffame[0], round_folder=round_folder)
+        # logger.info(f"Test_result 1: {test_result}")
+        # test_result = toolbox.evaluate_test(halloffame[0], round_folder=round_folder)
+        # logger.info(f"Test_result 2: {test_result}")
+        # test_result = toolbox.evaluate_test(halloffame[0], round_folder=round_folder)
+        # logger.info(f"Test_result 3: {test_result}")
         # test_result = toolbox.evaluate_test(halloffame[0])
         logger.info("Best individual: {}".format(halloffame[0]))
         return test_result
+
+    # def eval_models_in_parallel(self, population):
+    #     pool = multiprocessing.Pool(processes=2)
+    #     results = pool.map(self.eval_train_model, population)
+    #     return results
