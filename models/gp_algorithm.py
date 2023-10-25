@@ -102,7 +102,7 @@ class GPAlgorithm:
     def eval_train(self, individual):
         config = self.config
         device = self.device
-        if "gray" in config.data_name:
+        if "gray" in config.data_name or config.image_mode == "gray":
             input_channels = 1
         else:
             input_channels = 3
@@ -293,7 +293,7 @@ class GPAlgorithm:
         # self.logger.info(individual)
         config = self.config
         device = self.device
-        if "gray" in config.data_name:
+        if "gray" in config.data_name or config.image_mode == "gray":
             input_channels = 1
         else:
             input_channels = 3
@@ -426,10 +426,9 @@ class GPAlgorithm:
 
     def initialize_standard_operations(self):
         primitive_set = gp_tree.PrimitiveSetTyped('MAIN', [Img], Vector, prefix='Image')
-
-        primitive_set.addPrimitive(None, [Img], Vector, name='Root1')
+        # primitive_set.addPrimitive(None, [Img], Vector, name='Root1')
         primitive_set.addPrimitive(None, [Img, Img], Vector, name='Root2')
-        primitive_set.addPrimitive(None, [Img, Img, Img], Vector, name='Root3')
+        # primitive_set.addPrimitive(None, [Img, Img, Img], Vector, name='Root3')
         # primitive_set.addPrimitive(None, [Img, Img, Img, Img], Vector, name='Root4')
 
         # Pooling functions at the Pooling layer.
@@ -439,7 +438,7 @@ class GPAlgorithm:
         # Filteing functions at the Filtering layer
         primitive_set.addPrimitive(None, [Img], Img, name='Conv3')  # convolution operator
         primitive_set.addPrimitive(None, [Img], Img, name='Conv5')  # convolution operator
-        primitive_set.addPrimitive(None, [Img, Double, Img, Double], Img, name='Add2')
+        # primitive_set.addPrimitive(None, [Img, Double, Img, Double], Img, name='Add2')
         # +primitive_set.addPrimitive(None, [Img, Double, Img, Double, Img, Double], Img, name='Add3')
 
         # Terminals
@@ -528,6 +527,8 @@ class GPAlgorithm:
         config = self.config
         logger = self.logger
         population = toolbox.population(config.population)
+        for p in population:
+            print(p)
         halloffame = tools.HallOfFame(10)
         log = tools.Logbook()
         stats_fit = tools.Statistics(key=lambda ind: ind.fitness.values)

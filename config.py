@@ -53,10 +53,11 @@ class SearchConfig(BaseConfig):
         parser.add_argument('--gpus', default='0', help='GPU device ids separated by comma. '
                             '`all` indicates use all GPUs')
         parser.add_argument('--generations', type=int, default=50, help='Number of generations')
-        parser.add_argument('--initialMaxDepth', type=int, default=4, help='Initial maximum depth')
+        parser.add_argument('--initialMaxDepth', type=int, default=6, help='Initial maximum depth')
         parser.add_argument('--initialMinDepth', type=int, default=2, help='Initial minimum depth')
+        parser.add_argument('--image_mode', type=str, default="rgb", help='')
         parser.add_argument('--log_path', type=str, default="log", help='Log file path')
-        parser.add_argument('--maxDepth', type=int, default=6, help='Maximum depth')
+        parser.add_argument('--maxDepth', type=int, default=8, help='Maximum depth')
         parser.add_argument('--mutProb', type=float, default=0.49, help='Mutation probability')
         parser.add_argument('--network_operations', choices=['standard', 'darts', 'single'], type=str,
                             default="standard",

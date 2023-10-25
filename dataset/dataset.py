@@ -57,7 +57,7 @@ class DataLoaderManager:
     def __init__(self, config, logger):
         self.config = config
         self.logger = logger
-        if "gray" in config.data_name:
+        if "gray" in config.data_name or config.image_mode == "gray":
             transform = transforms.Compose([
                 transforms.ToTensor(),  # 将图片转换为Tensor,归一化至[0,1]
                 transforms.Normalize(mean=[0.5], std=[0.5])

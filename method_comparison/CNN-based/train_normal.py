@@ -29,13 +29,13 @@ transform = transforms.Compose([
     # transforms.RandomHorizontalFlip(),
     # transforms.RandomCrop(32, padding=4),
     transforms.ToTensor(),
-    transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
+    transforms.Normalize((0.5, ), (0.5, )),
 ])
 
-root_path = "/home/triplef/code/trainableGP/dataset/raw/cifar10"
+root_path = "/home/triplef/code/trainableGP/dataset/raw/FMNIST"
 
-trainset = torchvision.datasets.CIFAR10(root=root_path, train=True, download=False, transform=transform)
-testset = torchvision.datasets.CIFAR10(root=root_path, train=False, download=False, transform=transform)
+trainset = torchvision.datasets.FashionMNIST(root=root_path, train=True, download=False, transform=transform)
+testset = torchvision.datasets.FashionMNIST(root=root_path, train=False, download=False, transform=transform)
 result = []
 
 for exp_round in range(10):
@@ -43,7 +43,7 @@ for exp_round in range(10):
 
     net = SimpleCNN()
     criterion = nn.CrossEntropyLoss()
-    optimizer = optim.Adam(net.parameters(), lr=0.00001)
+    optimizer = optim.Adam(net.parameters(), lr=0.0001)
 
     # 训练
 
