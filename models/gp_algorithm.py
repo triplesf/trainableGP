@@ -426,9 +426,9 @@ class GPAlgorithm:
 
     def initialize_standard_operations(self):
         primitive_set = gp_tree.PrimitiveSetTyped('MAIN', [Img], Vector, prefix='Image')
-        # primitive_set.addPrimitive(None, [Img], Vector, name='Root1')
+        primitive_set.addPrimitive(None, [Img], Vector, name='Root1')
         primitive_set.addPrimitive(None, [Img, Img], Vector, name='Root2')
-        # primitive_set.addPrimitive(None, [Img, Img, Img], Vector, name='Root3')
+        primitive_set.addPrimitive(None, [Img, Img, Img], Vector, name='Root3')
         # primitive_set.addPrimitive(None, [Img, Img, Img, Img], Vector, name='Root4')
 
         # Pooling functions at the Pooling layer.
@@ -438,12 +438,14 @@ class GPAlgorithm:
         # Filteing functions at the Filtering layer
         primitive_set.addPrimitive(None, [Img], Img, name='Conv3')  # convolution operator
         primitive_set.addPrimitive(None, [Img], Img, name='Conv5')  # convolution operator
+        primitive_set.addPrimitive(None, [Img], Img, name='Conv7')  # convolution operator
         # primitive_set.addPrimitive(None, [Img, Double, Img, Double], Img, name='Add2')
         # +primitive_set.addPrimitive(None, [Img, Double, Img, Double, Img, Double], Img, name='Add3')
 
         # Terminals
         primitive_set.renameArguments(ARG0='grey')  # the input image
-        primitive_set.addEphemeralConstant('randomD', lambda: round(random.random(), 3), Double)
+        # primitive_set.addEphemeralConstant('randomD', lambda: round(random.random(), 3), Double)
+        primitive_set.addEphemeralConstant('randomD', lambda: 0.5, Double)
 
         return primitive_set
 
@@ -527,8 +529,8 @@ class GPAlgorithm:
         config = self.config
         logger = self.logger
         population = toolbox.population(config.population)
-        for p in population:
-            print(p)
+        # for p in population:
+        #     print(p)
         halloffame = tools.HallOfFame(10)
         log = tools.Logbook()
         stats_fit = tools.Statistics(key=lambda ind: ind.fitness.values)
@@ -639,15 +641,10 @@ class GPAlgorithm:
             for i in hof_store:
                 cop_po.append(i)
             population[:] = offspring
-
-            test_results = toolbox.evaluate_test(halloffame[0])
-
-            # test_result = toolbox.evaluate_test(halloffame[0])
-            # logger.info(f"Test_result 1: {test_result}")
-            # test_result = toolbox.evaluate_test(halloffame[0])
-            # logger.info(f"Test_result 2: {test_result}")
-            # test_result = toolbox.evaluate_test(halloffame[0])
-            # logger.info(f"Test_result 3: {test_result}")
+            if gen == config.generations:
+                test_results = toolbox.evaluate_test(halloffame[0], round_folder=round_folder)
+            else:
+                test_results = toolbox.evaluate_test(halloffame[0])
 
             record = stats.compile(population) if stats else {}
             for i, t in record.items():
@@ -673,7 +670,7 @@ class GPAlgorithm:
             plot_fitness_curve(vis_items, round_folder)
             plot_fitness_boxplot(vis_items, round_folder)
 
-        test_result = toolbox.evaluate_test(halloffame[0], round_folder=round_folder)
+        # test_result = toolbox.evaluate_test(halloffame[0], round_folder=round_folder)
         # logger.info(f"Test_result 1: {test_result}")
         # test_result = toolbox.evaluate_test(halloffame[0], round_folder=round_folder)
         # logger.info(f"Test_result 2: {test_result}")
@@ -681,7 +678,7 @@ class GPAlgorithm:
         # logger.info(f"Test_result 3: {test_result}")
         # test_result = toolbox.evaluate_test(halloffame[0])
         logger.info("Best individual: {}".format(halloffame[0]))
-        return test_result
+        return test_results
 
     # def eval_models_in_parallel(self, population):
     #     pool = multiprocessing.Pool(processes=2)

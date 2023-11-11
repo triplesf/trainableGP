@@ -283,3 +283,13 @@ def genFullMD(pset, min_, max_, type_=None):
 ##    while len(expr)>20:
 ##        expr=generateMD(pset, min_, max_, condition, type_)
     return expr
+
+def genGrowMD(pset, min_, max_, type_=None):
+    expr=genGrow(pset, min_, max_, type_=None)
+    #print(expr)
+    #print('expr before', len(expr))
+    while len(expr)>60:
+        expr=genGrow(pset, min_, max_, type_=None)
+        #print('expr before', len(expr))
+    #print('expr after',len(expr))
+    return expr

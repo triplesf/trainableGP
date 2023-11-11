@@ -58,11 +58,11 @@ class SearchConfig(BaseConfig):
         parser.add_argument('--image_mode', type=str, default="rgb", help='')
         parser.add_argument('--log_path', type=str, default="log", help='Log file path')
         parser.add_argument('--maxDepth', type=int, default=8, help='Maximum depth')
-        parser.add_argument('--mutProb', type=float, default=0.49, help='Mutation probability')
+        parser.add_argument('--mutProb', type=float, default=0.6, help='Mutation probability')
         parser.add_argument('--network_operations', choices=['standard', 'darts', 'single'], type=str,
                             default="standard",
                             help='Choose between "standard", "darts" or "single" for network operations')
-        parser.add_argument('--num_hidden_layers', type=int, default=16, help='Number of hidden layers')
+        parser.add_argument('--num_hidden_layers', type=int, default=64, help='Number of hidden layers')
         parser.add_argument('--population', type=int, default=100, help='Population')
         parser.add_argument('--result_path', type=str, default="results", help='Result folder path')
         parser.add_argument('--rounds_experiment', type=int, default=10, help='Number of rounds of experiments')

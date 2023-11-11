@@ -9,7 +9,7 @@ import datetime
 import os
 
 warnings.filterwarnings('ignore')
-seed = 32
+seed = 6
 torch.manual_seed(seed)
 np.random.seed(seed)
 

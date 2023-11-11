@@ -12,6 +12,7 @@ standard_operations = {
     'Conv3': lambda C, stride, affine: StdConv(C, C, 3, stride, 1, affine=affine),
     'Conv5F': lambda C, stride, affine: StdConv(C, C, 5, stride, 2, affine=affine),
     'Conv5': lambda C, stride, affine: StdConv(C, C, 5, stride, 2, affine=affine),
+    'Conv7': lambda C, stride, affine: StdConv(C, C, 7, stride, 3, affine=affine)
 }
 
 
@@ -98,8 +99,8 @@ class StdConv(nn.Module):
     def __init__(self, C_in, C_out, kernel_size, stride, padding, affine=True):
         super().__init__()
         self.net = nn.Sequential(
-            nn.ReLU(),
             nn.Conv2d(C_in, C_out, kernel_size, stride, padding, bias=False),
+            nn.ReLU(),
             nn.BatchNorm2d(C_out, affine=affine)
         )
 

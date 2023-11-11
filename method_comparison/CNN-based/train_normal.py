@@ -8,7 +8,7 @@ import torchvision
 import random
 import numpy as np
 
-seed = 42
+seed = 6
 torch.manual_seed(seed)
 np.random.seed(seed)
 

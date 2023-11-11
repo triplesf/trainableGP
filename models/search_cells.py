@@ -11,9 +11,24 @@ class ParallelSequentialModule(nn.ModuleList):
         super(ParallelSequentialModule, self).__init__(modules)
         self.parallel = parallel
         self.w_list = list()
+        self.weight = []
 
     def is_parallel(self):
         return self.parallel
+
+    def set_weight(self, w):
+        self.weight.append(w)
+
+    def insert(self, index, module):
+        # 检查索引范围
+        if index < 0 or index > len(self):
+            raise IndexError("Index is out of range")
+
+        # 插入模块到指定索引位置
+        self.append(None)  # 先在末尾添加一个占位符
+        for i in range(len(self) - 1, index, -1):
+            self[i] = self[i - 1]  # 后移模块
+        self[index] = module
 
 
 class SearchCell(nn.Module):
@@ -87,6 +102,43 @@ class SearchCell(nn.Module):
         self.dropout = nn.Dropout(0.7)
         self.use_dropout = use_dropout
         self.linear = nn.Linear(C_cur, n_classes)
+
+    def get_model(self, expr, C_cur, operations_type):
+        stack = []
+        dag = nn.ModuleList()
+        for node in expr:
+            stack.append((node, []))
+            while len(stack[-1][1]) == stack[-1][0].arity:
+                prim, args = stack.pop()
+                if "Root" in prim.name:
+                    for a in args:
+                        dag.append(a)
+                elif "Add" in prim.name:
+                    add_dag = ParallelSequentialModule(parallel=True)
+                    for i in range(0, len(args) - 1, 2):
+                        # 取两个元素进行相乘
+                        add_dag.append(args[i])
+                        add_dag.set_weight(args[i+1])
+
+                elif isinstance(prim, gp_tree.Primitive):
+                    op = OperationSelector(prim.name, C_cur, operations_type)
+                    after_op = args[0]
+                    if isinstance(after_op, ParallelSequentialModule) and not after_op.is_parallel():
+                        after_op.insert(0, op)
+                    else:
+                        after_op = ParallelSequentialModule([op], parallel=False)
+                    stack[-1][1].append(after_op)
+                else:
+                    stack[-1][1].append(prim.value)
+
+                if len(stack) == 0:
+                    break   # If stack is empty, all nodes should have been seen
+                # stack[-1][1].append(string)
+
+        return dag
+
+    def get_model_(self):
+        pass
 
     def create_graph(self, expr):
         nodes = list(range(len(expr)))
